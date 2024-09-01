@@ -1,0 +1,25 @@
+{
+  "name": "sebenv",
+  "version": "0.0.3",
+  "author": "Yejneshwar Sivamoorthy",
+  "type": "module",
+  "description": "CLI tool to ensure environment variables are set.",
+  "main": "index.js",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "inquirer": "^9.3.6",
+    "sebenv": "file:"
+  },
+  "bin": {
+    "SebEnv": "index.js"
+  },
+  "license": "AGPL-3.0-only",
+  "keywords": [
+    "cli",
+    "environment",
+    "variables",
+    "env",
+    "envcheck",
+    "sebenv"
+  ]
+}

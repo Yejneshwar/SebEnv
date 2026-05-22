@@ -1,10 +1,17 @@
 {
   "name": "sebenv",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "author": "Yejneshwar Sivamoorthy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Yejneshwar/SebEnv.git"
+  },
   "type": "module",
   "description": "CLI tool to ensure environment variables are set.",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test"
+  },
   "dependencies": {
     "dotenv": "^16.4.5",
     "inquirer": "^9.3.6",

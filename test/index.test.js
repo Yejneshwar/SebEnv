@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import fs from 'fs';
-import path from 'path';
-import { tmpdir } from 'os';
+import fs from 'node:fs';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { hasWhiteSpace } from '../lib/utils.js';
 import { extractDestructuredVars, scanSourceForEnvVars } from '../lib/scanner.js';
 import { updateOrAppendEnv } from '../lib/envFile.js';
 import { addEnvVars, syncEnvVars, loadPackageJson } from '../lib/config.js';
-import { checkEnvVars } from '../lib/validator.js';
+import { checkEnvVars, ciCheck } from '../lib/validator.js';
 import { validateEnv } from '../index.js';
 
 test('hasWhiteSpace should detect whitespace correctly', () => {
@@ -467,6 +467,67 @@ test('validateEnv should throw error if required variables are missing and pass 
     }
 });
 
+test('validateEnv should support validating different environments (default, dev, prod)', () => {
+    const originalCwd = process.cwd();
+    const tempProjectDir = path.join(tmpdir(), `env-check-multi-env-${Date.now()}`);
+    
+    try {
+        fs.mkdirSync(tempProjectDir, { recursive: true });
+        
+        const packageJson = {
+            name: "test-multi-env",
+            envCheck: {
+                environments: {
+                    default: { DEFAULT_VAR: { required: true } },
+                    dev: { DEV_VAR: { required: true } },
+                    prod: { PROD_VAR: { required: true } }
+                }
+            }
+        };
+        fs.writeFileSync(path.join(tempProjectDir, 'package.json'), JSON.stringify(packageJson, null, 2), 'utf8');
+        process.chdir(tempProjectDir);
+        
+        // 1. Test "default" environment (explicit and implicit)
+        assert.throws(
+            () => { validateEnv('default'); },
+            /SebEnv Validation Error: Missing required environment variables for environment 'default': DEFAULT_VAR/
+        );
+        assert.throws(
+            () => { validateEnv(); }, // Should fallback to 'default'
+            /SebEnv Validation Error: Missing required environment variables for environment 'default': DEFAULT_VAR/
+        );
+        process.env.DEFAULT_VAR = '1';
+        assert.doesNotThrow(() => { validateEnv('default'); });
+        
+        // 2. Test "dev" environment
+        assert.throws(
+            () => { validateEnv('dev'); },
+            /SebEnv Validation Error: Missing required environment variables for environment 'dev': DEV_VAR/
+        );
+        process.env.DEV_VAR = '1';
+        assert.doesNotThrow(() => { validateEnv('dev'); });
+        
+        // 3. Test "prod" environment using NODE_ENV
+        process.env.NODE_ENV = 'prod';
+        assert.throws(
+            () => { validateEnv(); }, // Should read process.env.NODE_ENV
+            /SebEnv Validation Error: Missing required environment variables for environment 'prod': PROD_VAR/
+        );
+        process.env.PROD_VAR = '1';
+        assert.doesNotThrow(() => { validateEnv(); });
+        
+    } finally {
+        delete process.env.DEFAULT_VAR;
+        delete process.env.DEV_VAR;
+        delete process.env.PROD_VAR;
+        delete process.env.NODE_ENV;
+        process.chdir(originalCwd);
+        try {
+            fs.rmSync(tempProjectDir, { recursive: true, force: true });
+        } catch {}
+    }
+});
+
 test('validateEnv should perform legacy upgrades in memory without mutating package.json on disk', () => {
     const originalCwd = process.cwd();
     const tempProjectDir = path.join(tmpdir(), `env-check-readonly-${Date.now()}`);
@@ -499,4 +560,90 @@ test('validateEnv should perform legacy upgrades in memory without mutating pack
             // ignore
         }
     }
+});
+
+test('ciCheck utility', async (t) => {
+    await t.test('should exit with 1 if env file is not found', () => {
+        const originalExit = process.exit;
+        const originalError = console.error;
+        let exitCode = null;
+        let errorMsg = '';
+        process.exit = (code) => { exitCode = code; };
+        console.error = (msg) => { errorMsg += msg; };
+
+        ciCheck('nonexistent.env');
+
+        assert.strictEqual(exitCode, 1);
+        assert.ok(errorMsg.includes('Environment file not found'));
+
+        process.exit = originalExit;
+        console.error = originalError;
+    });
+
+    await t.test('should exit with 1 if required env vars are missing', () => {
+        const tempProjectDir = path.join(tmpdir(), `env-check-ci-missing-${Date.now()}`);
+        fs.mkdirSync(tempProjectDir, { recursive: true });
+        
+        const packageJson = {
+            envCheck: { environments: { default: { MISSING_CI_VAR: { required: true }, ANOTHER_VAR: { required: true } } } }
+        };
+        fs.writeFileSync(path.join(tempProjectDir, 'package.json'), JSON.stringify(packageJson), 'utf8');
+        
+        const envContent = 'MISSING_CI_VAR=123';
+        fs.writeFileSync(path.join(tempProjectDir, '.env'), envContent, 'utf8');
+
+        const originalCwd = process.cwd();
+        process.chdir(tempProjectDir);
+
+        const originalExit = process.exit;
+        const originalError = console.error;
+        let exitCode = null;
+        let errorMsg = '';
+        process.exit = (code) => { exitCode = code; };
+        console.error = (msg) => { errorMsg += msg; };
+
+        ciCheck('.env');
+
+        assert.strictEqual(exitCode, 1);
+        assert.ok(errorMsg.includes('Missing required environment variables'));
+        assert.ok(errorMsg.includes('ANOTHER_VAR')); // ANOTHER_VAR is missing since we only provided MISSING_CI_VAR in .env
+
+        process.exit = originalExit;
+        console.error = originalError;
+        process.chdir(originalCwd);
+        try { fs.rmSync(tempProjectDir, { recursive: true, force: true }); } catch {}
+    });
+
+    await t.test('should pass if all required env vars are defined', () => {
+        const tempProjectDir = path.join(tmpdir(), `env-check-ci-pass-${Date.now()}`);
+        fs.mkdirSync(tempProjectDir, { recursive: true });
+        
+        const packageJson = {
+            envCheck: { environments: { default: { EXISTING_CI_VAR: { required: true } } } }
+        };
+        fs.writeFileSync(path.join(tempProjectDir, 'package.json'), JSON.stringify(packageJson), 'utf8');
+        
+        const envContent = 'EXISTING_CI_VAR=exists';
+        fs.writeFileSync(path.join(tempProjectDir, '.env'), envContent, 'utf8');
+
+        const originalCwd = process.cwd();
+        process.chdir(tempProjectDir);
+
+        const originalExit = process.exit;
+        const originalLog = console.log;
+        let exitCode = null;
+        let logMsg = '';
+        process.exit = (code) => { exitCode = code; };
+        console.log = (msg) => { logMsg += msg; };
+
+        ciCheck('.env');
+
+        assert.strictEqual(exitCode, null);
+        assert.ok(logMsg.includes("All required environment variables for environment 'default' are defined."));
+
+        process.exit = originalExit;
+        console.log = originalLog;
+        process.chdir(originalCwd);
+        try { fs.rmSync(tempProjectDir, { recursive: true, force: true }); } catch {}
+    });
 });

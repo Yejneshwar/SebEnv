@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 
 import { addEnvVars, syncEnvVars } from './lib/config.js';
 import { scanAndAddVars } from './lib/prompter.js';
-import { checkEnvVars } from './lib/validator.js';
+import { checkEnvVars, ciCheck } from './lib/validator.js';
 
 // Load existing environment variables from .env
 const envPath = path.resolve(process.cwd(), '.env');
 dotenv.config({ path: envPath });
 
 // Re-exports
-export { validateEnv } from './lib/validator.js';
+export { validateEnv, ciCheck } from './lib/validator.js';
 
 // Main function to run the script
 export const main = async () => {
@@ -54,6 +54,9 @@ export const main = async () => {
             await syncEnvVars(targetEnv || 'default');
         } else if (commandArgs[0] === '--scan' || commandArgs[0] === '--find') {
             await scanAndAddVars(cliExclude, targetEnv);
+        } else if (commandArgs[0] === '--ci') {
+            const filePath = commandArgs[1] || '.env';
+            ciCheck(filePath, targetEnv);
         } else {
             console.error(`Unknown command: ${commandArgs[0]}`);
             process.exit(1);

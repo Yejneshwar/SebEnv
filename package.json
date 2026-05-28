@@ -1,6 +1,6 @@
 {
   "name": "sebenv",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "author": "Yejneshwar Sivamoorthy",
   "repository": {
     "type": "git",
@@ -8,8 +8,17 @@
   },
   "type": "module",
   "description": "CLI tool to ensure environment variables are set.",
-  "main": "index.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
   "scripts": {
+    "build": "rolldown -c",
+    "prepublishOnly": "npm run test && npm run build",
     "test": "node --test"
   },
   "dependencies": {
@@ -28,5 +37,8 @@
     "env",
     "envcheck",
     "sebenv"
-  ]
+  ],
+  "devDependencies": {
+    "rolldown": "^1.0.2"
+  }
 }

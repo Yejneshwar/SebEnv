@@ -10,6 +10,7 @@
 - **Add Variables**: Add new environment variables to the `envCheck` section in `package.json`.
 - **Sync Variables**: Syncs environment variables from your `.env` file to the `envCheck` section in `package.json`.
 - **Scan Source Code**: Scans project files recursively to detect `process.env` usages and adds them interactively.
+- **CI/CD Validation**: Non-interactively validates environment variables in CI pipelines using strict checks.
 - **Interactive CLI**: Prompts you to input missing environment variables and updates the `.env` file automatically.
 
 ## Installation
@@ -81,6 +82,20 @@ SebEnv --scan --env dev
 SebEnv --add API_KEY --env staging
 ```
 If `--env` is omitted, `SebEnv` checks the environment matching the `NODE_ENV` system variable, or falls back to the `default` environment.
+
+### 5. Validating in CI Pipelines
+
+For CI/CD environments, you need strict, non-interactive validation. Use the `--ci` flag to load an environment file and validate its variables against your `package.json` environment requirements.
+
+```bash
+# Validates the default environment by loading `.env`
+SebEnv --ci
+
+# Validates the 'prod' environment by loading `.env.prod`
+SebEnv --ci .env.prod --env prod
+```
+
+If any required variables for the target environment are missing from the loaded environment file, `SebEnv` will throw an error and halt the pipeline with an exit code of `1`.
 
 ## Configuration
 
